@@ -262,6 +262,7 @@ export default class SegmentLoader extends videojs.EventTarget {
         if (newState !== this.state_) {
           this.logger_(`${this.state_} -> ${newState}`);
           this.state_ = newState;
+          this.trigger('statechange');
         }
       }
     });
@@ -1852,9 +1853,6 @@ export default class SegmentLoader extends videojs.EventTarget {
         (isEndOfStream || (isWalkingForward && isDiscontinuity))) {
       segmentTransmuxer.endTimeline(this.transmuxer_);
     }
-
-    // used for testing
-    this.trigger('appending');
 
     this.waitForAppendsToComplete_(segmentInfo);
   }

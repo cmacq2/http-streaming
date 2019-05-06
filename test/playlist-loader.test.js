@@ -1562,8 +1562,10 @@ QUnit.test('can switch media playlists based on URI', function(assert) {
 
 QUnit.test('aborts in-flight playlist refreshes when switching', function(assert) {
   let loader = new PlaylistLoader('master.m3u8', this.fakeHls);
+  console.log(loader.state);
 
   loader.load();
+  console.log(loader.state);
 
   this.requests.pop().respond(200, null,
                               '#EXTM3U\n' +
