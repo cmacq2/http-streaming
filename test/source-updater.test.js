@@ -27,14 +27,72 @@ QUnit.module('Source Updater', {
   }
 });
 
-QUnit.test('initial video timestamp offset is set to 0', function(assert) {
-  assert.equal(
-    this.sourceUpdater.videoTimestampOffset(), 0, 'initial video timestamp offset is 0');
+QUnit.test('waits for sourceopen to createSourceBuffers', function(assert) {
+  this.sourceUpdater.dispose();
+  const video = document.createElement('video');
+
+  this.mediaSource = new window.MediaSource();
+  // need to attach the real media source to a video element for the media source to
+  // change to an open ready state
+  video.src = URL.createObjectURL(this.mediaSource);
+  this.sourceUpdater = new SourceUpdater(this.mediaSource);
+
+  this.sourceUpdater.createSourceBuffers({
+    audio: 'mp4a.40.2',
+    video: 'avc1.4d400d'
+  });
+
+  assert.notOk(this.sourceUpdater.audioBuffer, 'no audio buffer');
+  assert.notOk(this.sourceUpdater.videoBuffer, 'no video buffer');
+
+  // wait for the source to open (or error) before running through tests
+  return new Promise((accept, reject) => {
+    this.mediaSource.addEventListener('sourceopen', () => {
+      assert.ok(this.sourceUpdater.audioBuffer, 'audio buffer created');
+      assert.ok(this.sourceUpdater.videoBuffer, 'video buffer created');
+
+      accept();
+    });
+    this.mediaSource.addEventListener('error', reject);
+  });
 });
 
-QUnit.test('initial audio timestamp offset is set to 0', function(assert) {
-  assert.equal(
-    this.sourceUpdater.audioTimestampOffset(), 0, 'initial audio timestamp offset is 0');
+QUnit.test('runs callback when source buffer is created', function(assert) {
+  this.sourceUpdater.dispose();
+  const video = document.createElement('video');
+
+  this.mediaSource = new window.MediaSource();
+  // need to attach the real media source to a video element for the media source to
+  // change to an open ready state
+  video.src = URL.createObjectURL(this.mediaSource);
+  this.sourceUpdater = new SourceUpdater(this.mediaSource);
+
+  this.sourceUpdater.createSourceBuffers({
+    audio: 'mp4a.40.2',
+    video: 'avc1.4d400d'
+  });
+
+  this.sourceUpdater.appendBuffer({type: 'video', bytes: mp4Video()});
+
+  // wait for the source to open (or error) before running through tests
+  return new Promise((accept, reject) => {
+    this.mediaSource.addEventListener('sourceopen', () => {
+      assert.equal(this.sourceUpdater.queue.length, 0, 'nothing in queue');
+      assert.equal(this.sourceUpdater.pendingQueue, null, 'nothing in pendingQueue');
+      accept();
+    });
+    this.mediaSource.addEventListener('error', reject);
+  });
+});
+
+QUnit.test('initial values', function(assert) {
+  const videoOffset = this.sourceUpdater.videoTimestampOffset();
+  const audioOffset = this.sourceUpdater.audioTimestampOffset();
+
+  assert.equal(videoOffset, 0, 'initial video timestamp offset is 0');
+  assert.equal(audioOffset, 0, 'initial audio timestamp offset is 0');
+  assert.equal(this.sourceUpdater.ready(), false, 'not ready by default');
+  assert.equal(this.sourceUpdater.updating(), false, 'not updating by default');
 });
 
 QUnit.test('can set audio timestamp offset', function(assert) {
@@ -93,10 +151,6 @@ QUnit.test('setting audio timestamp offset without buffer is a noop', function(a
     this.sourceUpdater.audioTimestampOffset(), 0, 'offset stays at initial value');
 });
 
-QUnit.test('not ready by default', function(assert) {
-  assert.notOk(this.sourceUpdater.ready(), 'source updater is not ready');
-});
-
 QUnit.test('ready with a video buffer', function(assert) {
   this.sourceUpdater.createSourceBuffers({
     video: 'avc1.4d400d'
@@ -120,19 +174,22 @@ QUnit.test('ready with both an audio and video buffer', function(assert) {
 });
 
 QUnit.test('waits for sourceopen to create source buffers', function(assert) {
+  const addEventListeners = [];
+  const addSourceBuffers = [];
   const mockMediaSource = {
-    addEventListenerCalls: [],
-    addSourceBufferCalls: [],
     // readyState starts as closed, source updater has to wait for it to open
     readyState: 'closed',
     addEventListener:
-      (name, callback) => mockMediaSource.addEventListenerCalls.push({ name, callback }),
+      (name, callback) => addEventListeners.push({ name, callback }),
+    removeEventListener() {},
     addSourceBuffer: (mimeType) => {
-      mockMediaSource.addSourceBufferCalls.push(mimeType);
+      addSourceBuffers.push(mimeType);
       return {
         // source updater adds event listeners immediately after creation, mock out to
         // prevent errors
-        addEventListener() {}
+        addEventListener() {},
+        removeEventListener() {},
+        abort() {}
       };
     }
   };
@@ -140,40 +197,27 @@ QUnit.test('waits for sourceopen to create source buffers', function(assert) {
   // create new source update instance to allow for mocked media source
   const sourceUpdater = new SourceUpdater(mockMediaSource);
 
-  assert.equal(
-    mockMediaSource.addEventListenerCalls.length, 0, 'no event listener calls');
-  assert.equal(
-    mockMediaSource.addSourceBufferCalls.length, 0, 'no add source buffer calls');
+  assert.equal(addEventListeners.length, 0, 'no event listener calls');
+  assert.equal(addSourceBuffers.length, 0, 'no add source buffer calls');
 
   sourceUpdater.createSourceBuffers({
     video: 'avc1.4d400d',
     audio: 'mp4a.40.2'
   });
 
-  assert.equal(
-    mockMediaSource.addEventListenerCalls.length, 1, 'one event listener');
-  assert.equal(
-    mockMediaSource.addEventListenerCalls[0].name,
-    'sourceopen',
-    'listening on sourceopen');
-  assert.equal(
-    mockMediaSource.addSourceBufferCalls.length, 0, 'no add source buffer calls');
+  assert.equal(addEventListeners.length, 1, 'one event listener');
+  assert.equal(addEventListeners[0].name, 'sourceopen', 'listening on sourceopen');
+  assert.equal(addSourceBuffers.length, 0, 'no add source buffer calls');
 
   mockMediaSource.readyState = 'open';
-  mockMediaSource.addEventListenerCalls[0].callback();
+  addEventListeners[0].callback();
 
-  assert.equal(
-    mockMediaSource.addEventListenerCalls.length, 1, 'one event listener');
-  assert.equal(
-    mockMediaSource.addSourceBufferCalls.length, 2, 'two add source buffer calls');
-  assert.equal(
-    mockMediaSource.addSourceBufferCalls[0],
-    'audio/mp4;codecs="mp4a.40.2"',
-    'added audio source buffer');
-  assert.equal(
-    mockMediaSource.addSourceBufferCalls[1],
-    'video/mp4;codecs="avc1.4d400d"',
-    'added video source buffer');
+  assert.equal(addEventListeners.length, 1, 'one event listener');
+  assert.equal(addSourceBuffers.length, 2, 'two add source buffer calls');
+  assert.equal(addSourceBuffers[0], 'audio/mp4;codecs="mp4a.40.2"', 'added audio source buffer');
+  assert.equal(addSourceBuffers[1], 'video/mp4;codecs="avc1.4d400d"', 'added video source buffer');
+
+  sourceUpdater.dispose();
 });
 
 QUnit.test('audioBuffered can append to and get the audio buffer', function(assert) {
@@ -261,7 +305,7 @@ QUnit.test('buffered returns intersection of audio and video buffers', function(
     buffered: videojs.createTimeRanges([[1.25, 1.5], [5.1, 6.1], [10.5, 10.9]])
   };
 
- assert.timeRangesEqual(
+  assert.timeRangesEqual(
    this.sourceUpdater.buffered(),
    videojs.createTimeRanges([[1.25, 1.5], [5.5, 5.6], [10.5, 10.9]]),
    'buffered is intersection');
@@ -407,7 +451,7 @@ function(assert) {
     setTimeout(() => {
       assert.ok(executedCallback, 'executed callback');
       done();
-    }, 0);
+    }, 1);
   });
 
   assert.notOk(appendedAudio, 'haven\'t appended audio before callback is queued');
@@ -436,18 +480,15 @@ QUnit.test('videoQueueCallback calls callback after queue empties if queue is no
       setTimeout(() => {
         assert.ok(executedCallback, 'executed callback');
         done();
-      }, 0);
-
-      this.mediaSource.trigger('sourceopen');
-      sourceBuffer = this.mediaSource.sourceBuffers[0];
-
-      assert.notOk(appendedVideo, 'haven\'t appended video before callback is queued');
-
-      this.sourceUpdater.videoQueueCallback(() => {
-        executedCallback = true;
-      });
+      }, 1);
     });
-});
+
+    assert.notOk(appendedVideo, 'haven\'t appended video before callback is queued');
+
+    this.sourceUpdater.videoQueueCallback(() => {
+      executedCallback = true;
+    });
+  });
 
 QUnit.test('audioQueueCallback does not call video queue callback after queue empties',
 function(assert) {
@@ -462,11 +503,6 @@ function(assert) {
 
   let executedVideoCallback = false;
   let appendedAudio = false;
-
-  this.mediaSource.trigger('sourceopen');
-  sourceBuffer = this.mediaSource.sourceBuffers[0];
-
-  assert.equal(sourceBuffer.updates_.length, 1, 'delayed the update');
 
   this.sourceUpdater.appendBuffer({type: 'audio', bytes: mp4Audio()}, () => {
     appendedAudio = true;
@@ -510,22 +546,10 @@ function(assert) {
     }, 0);
   });
 
-  this.mediaSource.trigger('sourceopen');
-  sourceBuffer = this.mediaSource.sourceBuffers[0];
-
-  assert.equal(sourceBuffer.updates_.length, 1, 'queued some updates');
-  assert.deepEqual(sourceBuffer.updates_[0].append, new Uint8Array([0]),
-                  'ran the first update');
-
   // add a video queue entry so that the video queue callback doesn't immediately run
   this.sourceUpdater.queuePending.audio = {};
 
   assert.notOk(appendedVideo, 'haven\'t appended video before callback is queued');
-
-  sourceBuffer.trigger('updateend');
-  assert.equal(sourceBuffer.updates_.length, 3, 'queued the updates');
-  assert.deepEqual(sourceBuffer.updates_[2].append, new Uint8Array([2]),
-                  'ran the third update');
 
   this.sourceUpdater.audioQueueCallback(() => {
     executedAudioCallback = true;
@@ -548,11 +572,6 @@ QUnit.test('updating returns true if audio buffer is updating', function(assert)
 
   assert.ok(this.sourceUpdater.updating(), 'updating during audio append');
 
-  this.mediaSource.trigger('sourceopen');
-  sourceBuffer = this.mediaSource.sourceBuffers[0];
-  assert.equal(sourceBuffer.updates_.length, 1, 'ran an update');
-  assert.deepEqual(sourceBuffer.updates_[0].append, new Uint8Array([0]),
-                  'appended the bytes');
 });
 
 QUnit.test('updating returns true if video buffer is updating', function(assert) {
@@ -863,60 +882,66 @@ QUnit.test('dispose removes sourceopen listener', function(assert) {
     'removed sourceopen listener with correct callback');
 });
 
-QUnit.test('supports timestampOffset', function(assert) {
-  let updater = new SourceUpdater(this.mediaSource, 'video/mp2t');
-  let sourceBuffer;
+['audio', 'video'].forEach(function(type) {
+  QUnit.test(`runs next in queue after calling ${type}timestampOffset`, function(assert) {
+    let bytes;
+    const options = {};
 
-  this.mediaSource.trigger('sourceopen');
-  sourceBuffer = this.mediaSource.sourceBuffers[0];
+    if (type === 'video') {
+      options.video = 'avc1.4d400d';
+      bytes = mp4Video();
+    } else {
+      options.audio = 'mp4a.40.2';
+      bytes = mp4Audio();
+    }
+    let appendBufferCalled = false;
 
-  assert.equal(updater.timestampOffset(), 0, 'intialized to zero');
-  updater.timestampOffset(21);
-  assert.equal(updater.timestampOffset(), 21, 'reflects changes immediately');
-  assert.equal(sourceBuffer.timestampOffset, 21, 'applied the update');
+    this.sourceUpdater.createSourceBuffers(options);
+    this.sourceUpdater[`${type}Buffer`].appendBuffer = () => appendBufferCalled = true;
 
-  updater.timestampOffset(14);
-  assert.equal(updater.timestampOffset(), 14, 'reflects changes immediately');
-  assert.equal(sourceBuffer.timestampOffset, 21, 'queues application after updates');
+    this.sourceUpdater[`${type}TimestampOffset`](10);
+    this.sourceUpdater.appendBuffer({type, bytes});
 
-  sourceBuffer.trigger('updateend');
-  assert.equal(sourceBuffer.timestampOffset, 14, 'applied the update');
+    assert.equal(this.sourceUpdater[`${type}TimestampOffset`](), 10, 'offset correctly set');
+    assert.equal(this.sourceUpdater.queue.length, 0, 'append not in queue');
+    assert.equal(this.sourceUpdater.pendingQueue, null, 'append not in pending Queue');
+    assert.equal(appendBufferCalled, true, 'appendBuffer called on source buffer');
+  });
+
+  QUnit.test(`${type} abort on dispose waits until after a remove has finished`, function(assert) {
+    const done = assert.async();
+    const options = {};
+    let bytes;
+    const capitalType = type.charAt(0).toUpperCase() + type.slice(1);
+
+    if (type === 'video') {
+      options.video = 'avc1.4d400d';
+      bytes = mp4Video();
+    } else {
+      options.audio = 'mp4a.40.2';
+      bytes = mp4Audio();
+    }
+    let abort = false;
+
+    this.sourceUpdater.createSourceBuffers(options);
+    this.sourceUpdater[`${type}Buffer`].abort = () => {
+      abort = true;
+    };
+
+    this.sourceUpdater.appendBuffer({type, bytes}, () => {
+      this.sourceUpdater[`remove${capitalType}`](0, Infinity, () => {
+        assert.ok(!abort, 'abort not called right after remove');
+      });
+
+      assert.ok(this.sourceUpdater[`${type}Buffer`].removing, true, 'removing is set');
+      this.sourceUpdater.dispose();
+
+      this.sourceUpdater[`${type}Buffer`].addEventListener('updateend', () => {
+        assert.ok(abort, 'abort called after updateend');
+        done();
+      });
+      assert.equal(abort, false, 'abort not called right away');
+    });
+  });
 });
 
-QUnit.test('runs the next callback after calling timestampOffset', function(assert) {
-  let updater = new SourceUpdater(this.mediaSource, 'video/mp2t');
-  let sourceBuffer;
-
-  this.mediaSource.trigger('sourceopen');
-
-  updater.audioTimestampOffset(10);
-  updater.videoTimestampOffset(10);
-  updater.appendBuffer({type: 'video', bytes: mp4Video()});
-  updater.appendBuffer({type: 'audio', bytes: mp4Audio()});
-
-  assert.equal(updater.videoSourceBuffer.timestampOffset, 10, 'offset correctly set');
-  assert.equal(updater.audioSourceBuffer.timestampOffset, 10, 'offset correctly set');
-
-  assert.equal(sourceBuffer.queue.length, 0, 'append not in queue');
-  assert.equal(sourceBuffer.pendingQueue.video, null, 'append not in pending Queue');
-  assert.equal(sourceBuffer.pendingQueue.audio, null, 'append not in pending Queue');
-});
-
-QUnit.test('abort on dispose waits until after a remove has finished', function(assert) {
-  let updater = new SourceUpdater(this.mediaSource, 'video/mp2t');
-  let sourceBuffer;
-
-  this.mediaSource.trigger('sourceopen');
-
-  sourceBuffer = this.mediaSource.sourceBuffers[0];
-  sourceBuffer.trigger('updateend');
-  updater.remove(0, 10);
-  updater.dispose();
-
-  assert.deepEqual(sourceBuffer.updates_[1].remove, [0, 10], 'remove called');
-  assert.equal(sourceBuffer.updates_.length, 2, 'abort not called before updateend');
-
-  sourceBuffer.trigger('updateend');
-
-  assert.ok(sourceBuffer.updates_[2].abort, 'aborted the source buffer');
-});

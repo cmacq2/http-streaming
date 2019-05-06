@@ -21,7 +21,7 @@ const shiftQueue = (type, sourceUpdater) => {
   let queueEntry = sourceUpdater.queue[queueIndex];
 
   if (queueEntry.type === 'mediaSource') {
-    if (!updating('audio', sourceUpdater) && !updating('video', sourceUpdater)) {
+    if (!sourceUpdater.updating()) {
       sourceUpdater.queue.shift();
       queueEntry.action(sourceUpdater);
 
@@ -101,7 +101,7 @@ const actions = {
 
     sourceBuffer.timestampOffset = offset;
 
-    shiftQueue(type, sourceUpdater)
+    shiftQueue(type, sourceUpdater);
   },
   callback: (callback) => (type, sourceUpdater) => {
     callback();
@@ -132,7 +132,6 @@ const nextQueueIndexOfType = (type, queue) => {
 
   return null;
 };
-
 
 const pushQueue = ({type, sourceUpdater, action, doneFn, name}) => {
   sourceUpdater.queue.push({
@@ -264,8 +263,8 @@ export default class SourceUpdater extends videojs.EventTarget {
     let action = originalAction;
 
     if (videoSegmentTimingInfoCallback) {
-      action = (type, sourceUpdater) => {
-        if (type === 'video' && this.videoBuffer) {
+      action = (_type, sourceUpdater) => {
+        if (_type === 'video' && this.videoBuffer) {
           this.videoBuffer.addEventListener('videoSegmentTimingInfo', videoSegmentTimingInfoCallback);
         }
         originalAction(type, sourceUpdater);
@@ -278,7 +277,6 @@ export default class SourceUpdater extends videojs.EventTarget {
         originalDoneFn(err);
       };
     }
-
 
     pushQueue({
       type,
@@ -371,13 +369,8 @@ export default class SourceUpdater extends videojs.EventTarget {
    * @return {Boolean} the updating status of the SourceBuffer
    */
   updating() {
-    // the audio source buffer is updating
-    if (updating('audio', this)) {
-      return true;
-    }
-
-    // the video source buffer is updating
-    if (updating('video', this)) {
+    // the audio/video source buffer is updating
+    if (updating('audio', this) || updating('video', this)) {
       return true;
     }
 
@@ -457,6 +450,7 @@ export default class SourceUpdater extends videojs.EventTarget {
         this.audioBuffer.abort();
       }
       this.audioBuffer.removeEventListener('updateend', this.onAudioUpdateEnd_);
+      this.audioBuffer.removeEventListener('updateend', audioDisposeFn);
       this.audioBuffer.removeEventListener('error', this.onAudioError_);
       this.audioBuffer = null;
     };
@@ -470,6 +464,8 @@ export default class SourceUpdater extends videojs.EventTarget {
       this.videoBuffer = null;
     };
 
+    // TODO: can we just use "updating" rather than removing?
+    //       this was implemented in https://github.com/videojs/http-streaming/pull/442
     if (this.audioBuffer) {
       if (this.audioBuffer.removing) {
         this.audioBuffer.addEventListener('updateend', audioDisposeFn);
