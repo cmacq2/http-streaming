@@ -7,7 +7,8 @@ import {
   useFakeEnvironment,
   createResponseText,
   standardXHRResponse,
-  setupMediaSource
+  setupMediaSource,
+  waitForLoaderEvent
 } from './test-helpers.js';
 import { MasterPlaylistController } from '../src/master-playlist-controller';
 import SourceUpdater from '../src/source-updater';
@@ -179,17 +180,13 @@ export const LoaderCommonFactory = (LoaderConstructor,
       assert.equal(loader.paused(), false, 'unpaused during processing');
 
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appending', accept);
-        });
+        await waitForLoaderEvent(loader, 'appending');
       }
 
       loader.pause();
 
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
 
       assert.equal(loader.state, 'READY', 'finished processing');
@@ -215,9 +212,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
       ]]);
 
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
 
       assert.equal(this.requests.length, 0, 'no outstanding requests');
@@ -240,9 +235,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
       standardXHRResponse(this.requests.shift(), muxedSegment());
 
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
 
       this.clock.tick(10 * 1000);
@@ -264,9 +257,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
       standardXHRResponse(this.requests.shift(), muxedSegment());
 
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
 
       assert.equal(loader.bandwidth,
@@ -412,9 +403,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
 
       assert.equal(progresses, 0, 'no bandwidthupdate fired');
@@ -425,9 +414,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
 
       assert.equal(progresses, 1, 'fired bandwidthupdate');
@@ -473,9 +460,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
       standardXHRResponse(this.requests.shift(), mp4VideoSegment());
 
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
       this.clock.tick(1);
 
@@ -522,9 +507,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
       standardXHRResponse(this.requests.shift(), mp4VideoSegment());
 
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
       this.clock.tick(1);
 
@@ -596,9 +579,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
                    'requesting the segment at mediaIndex 3');
       standardXHRResponse(this.requests.shift(), muxedSegment());
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
 
       assert.equal(loader.mediaIndex, 3, 'mediaIndex ends at 3');
@@ -621,9 +602,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
 
       assert.equal(loader.mediaIndex, 2, 'SegmentLoader.mediaIndex ends at 2');
@@ -675,9 +654,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
                    'requesting the segment at mediaIndex 3');
       standardXHRResponse(this.requests.shift(), muxedSegment());
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
       this.clock.tick(1);
       segmentInfo = loader.pendingSegment_;
@@ -699,9 +676,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
       expectedLoaderIndex = 1;
       standardXHRResponse(this.requests.shift(), muxedSegment());
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
     });
 
@@ -938,9 +913,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
       loader.playlist(playlistUpdated);
       // finish append
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
       this.clock.tick(1);
 
@@ -987,9 +960,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
       // wrap up the first request to set mediaIndex and start normal live streaming
       standardXHRResponse(this.requests.shift(), muxedSegment());
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
       this.clock.tick(1);
 
@@ -1015,9 +986,7 @@ export const LoaderCommonFactory = (LoaderConstructor,
       expectedURI = '1.ts';
       standardXHRResponse(this.requests.shift(), muxedSegment());
       if (usesAsyncAppends) {
-        await new Promise((accept, reject) => {
-          loader.on('appended', accept);
-        });
+        await waitForLoaderEvent(loader, 'appended');
       }
     });
 

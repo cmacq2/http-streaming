@@ -527,9 +527,7 @@ export const requestAndAppendSegment = async function({
 
   // fmp4 segments don't need to be transmuxed, therefore will execute synchronously
   if (!isLikelyFmp4Data(segment)) {
-    await new Promise((accept, reject) => {
-      segmentLoader.on('appending', accept);
-    });
+    await waitForLoaderEvent(segmentLoader, 'appending');
   }
 
   if (throughput) {
@@ -555,6 +553,27 @@ export const requestAndAppendSegment = async function({
   if (tickClock) {
     clock.tick(1);
   }
+};
+
+export const waitForLoaderEvent = function(loader, eventName) {
+  return new Promise((resolve, reject) => {
+    let onFailure = () => {};
+    const onSuccess = () => {
+      loader.off(eventName, onSuccess)
+      loader.off('error', onFailure)
+      resolve();
+    };
+
+    if (eventName !== 'error') {
+      onFailure = () => {
+        loader.off(eventName, onSuccess)
+        loader.off('error', onFailure)
+        reject(loader.error());
+      };
+    }
+    loader.on(eventName, onSuccess);
+    loader.on('error', onFailure);
+  });
 };
 
 export const disposePlaybackWatcher = (player) => {

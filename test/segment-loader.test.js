@@ -10,7 +10,8 @@ import mp4probe from 'mux.js/lib/mp4/probe';
 import {
   playlistWithDuration,
   standardXHRResponse,
-  setupMediaSource
+  setupMediaSource,
+  waitForLoaderEvent
 } from './test-helpers.js';
 import {
   LoaderCommonHooks,
@@ -187,9 +188,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       // some time passes and a segment is received
       this.clock.tick(100);
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       assert.equal(this.requests.length, 0, 'only made one request');
     });
 
@@ -215,9 +214,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       standardXHRResponse(this.requests.shift(), mp4VideoInitSegment());
       // segment
       standardXHRResponse(this.requests.shift(), mp4VideoSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(
         loader.sourceUpdater_.videoTimestampOffset(), -11, 'set timestampOffset');
@@ -391,9 +388,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       // the appended event will not fire, as segment-loader will realize that its guess
       // was off and will reset everything to load at the new point, therefore, wait for
       // the syncinfoupdate event rather than the appended event
-      await new Promise((accept, reject) => {
-        loader.on('syncinfoupdate', accept);
-      });
+      await waitForLoaderEvent(loader, 'syncinfoupdate');
       this.clock.tick(1);
 
       assert.equal(loader.mediaIndex, null, 'mediaIndex reset by seek to seekable');
@@ -411,9 +406,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       this.clock.tick(1);
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appending', accept);
-      });
+      await waitForLoaderEvent(loader, 'appending');
       loader.abort();
       this.clock.tick(1);
 
@@ -472,9 +465,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       // segment 0
       standardXHRResponse(this.requests.shift(), videoSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(timestampOffsetEvents, 1, 'timestampoffset event was fired');
       assert.equal(
@@ -508,9 +499,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       videoSegmentEndTime = 23;
       // segment 1
       standardXHRResponse(this.requests.shift(), videoSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(timestampOffsetEvents, 1, 'timestampoffset event was not fired again');
       assert.equal(
@@ -545,9 +534,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       videoSegmentEndTime = 111;
       // segment 2
       standardXHRResponse(this.requests.shift(), videoSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(timestampOffsetEvents, 2, 'timestampoffset event was fired');
       assert.equal(
@@ -571,9 +558,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       assert.notOk(playlist.segments[0].end, 'does not start with duration');
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.ok(playlist.segments[0].end, 'updated duration');
@@ -595,9 +580,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       // Respond with a segment, and wait until it is appended
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.strictEqual(
         addCueSpy.callCount,
@@ -607,9 +590,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       this.clock.tick(1);
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.strictEqual(
         addCueSpy.callCount,
@@ -633,9 +614,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       // Respond with a segment, and wait until it is appended
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(addCueSpy.callCount, 1, 'cue added for appended segment');
 
@@ -678,17 +657,12 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
 
-      // Simulate an id3Frame event happening that will call handleId3_
-      const handleId3 = () => {
-        loader.handleId3_(loader.pendingSegment_, metadataCues, dispatchType);
-      };
+      await waitForLoaderEvent(loader, 'appending');
 
-      await new Promise((accept, reject) => {
-        // we needed some data to be appended first,
-        // but the append is not yet finished
-        loader.on('appending', handleId3);
-        loader.on('appended', accept);
-      });
+      // Simulate an id3Frame event happening that will call handleId3_
+      loader.handleId3_(loader.pendingSegment_, metadataCues, dispatchType);
+
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.strictEqual(
@@ -733,17 +707,13 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
 
-      // Simulate a caption event happening that will call handleCaptions_
-      const handleCaptions = () => {
-        loader.handleCaptions_(loader.pendingSegment_, captions);
-      };
 
-      await new Promise((accept, reject) => {
-        // we needed some data appended first,
-        // but we haven't finished the append yet
-        loader.on('appending', handleCaptions);
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appending');
+
+      // Simulate a caption event happening that will call handleCaptions_
+      loader.handleCaptions_(loader.pendingSegment_, captions);
+
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.ok(
         Object.keys(loader.inbandTextTracks_.CC1),
@@ -784,18 +754,13 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       standardXHRResponse(this.requests.shift(), audioSegment());
 
-      const dispatchType = 0x10;
-      // Simulate a caption event happening that will call handleCaptions_
-      const handleId3 = () => {
-        loader.handleId3_(loader.pendingSegment_, metadata, dispatchType);
-      };
+      await waitForLoaderEvent(loader, 'appending');
 
-      await new Promise((accept, reject) => {
-        // we needed some data appended first,
-        // but we haven't finished the append yet
-        loader.on('appending', handleId3);
-        loader.on('appended', accept);
-      });
+      // Simulate a caption event happening that will call handleCaptions_
+      const dispatchType = 0x10;
+      loader.handleId3_(loader.pendingSegment_, metadata, dispatchType);
+
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.ok(
         Object.keys(loader.inbandTextTracks_.metadataTrack_), 'created a metadata track');
@@ -822,9 +787,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       this.clock.tick(1);
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(endOfStreams, 1, 'triggered ended');
@@ -849,15 +812,11 @@ QUnit.module('SegmentLoader', function(hooks) {
       this.clock.tick(1);
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(10);
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(bandwidthupdates, 1, 'triggered bandwidthupdate');
       assert.equal(endOfStreams, 1, 'triggered ended');
@@ -918,9 +877,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       this.clock.tick(1);
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(endOfStreams, 0, 'did not trigger ended');
@@ -945,9 +902,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       // wrap up the first request to set mediaIndex and start normal live streaming
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(loader.state, 'WAITING', 'in waiting state');
@@ -969,9 +924,7 @@ QUnit.module('SegmentLoader', function(hooks) {
                    'correct segment reference');
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(
         playlistUpdated.segments[0].start, 0, 'set start on segment of new playlist');
@@ -1003,9 +956,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       // wrap up the first request to set mediaIndex and start normal live streaming
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(loader.state, 'WAITING', 'in waiting state');
@@ -1028,9 +979,7 @@ QUnit.module('SegmentLoader', function(hooks) {
                    'correct segment reference');
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(playlist.segments[1].start, 0, 'set start on segment of old playlist');
       assert.ok(playlist.segments[1].end, 'set end on segment of old playlist');
@@ -1055,9 +1004,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       this.clock.tick(1);
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(errors.length, 0, 'no errors');
@@ -1086,9 +1033,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       this.clock.tick(1);
 
       standardXHRResponse(this.requests.shift(), audioSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(errors.length, 0, 'no errors');
@@ -1117,17 +1062,13 @@ QUnit.module('SegmentLoader', function(hooks) {
       this.clock.tick(1);
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(errors.length, 0, 'no errors');
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(errors.length, 0, 'no errors');
     });
@@ -1170,9 +1111,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       // load a segment as we can't remove if nothing's been appended
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       let removedCues = [];
@@ -1214,9 +1153,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       // load a segment as we can't remove if nothing's been appended
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       loader.inbandTextTracks_ = {
@@ -1241,9 +1178,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       // load a segment as we can't remove if nothing's been appended
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       loader.setAudio(false);
@@ -1278,20 +1213,15 @@ QUnit.module('SegmentLoader', function(hooks) {
       // mocking in this case because it's hard to find a good append error that will
       // 1) work across browsers
       // 2) won't cause an error in the transmuxer first
-      loader.sourceUpdater_.appendBuffer = (type, bytes, callback) => {
+      loader.sourceUpdater_.appendBuffer = ({type, bytes}, callback) => {
         callback(error);
       };
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
 
-      await new Promise((accept, reject) => {
-        loader.on('appenderror', () => {
-          assert.deepEqual(
-            loader.error_, error,
-            'loader triggered and saved the appenderror');
-          accept();
-        });
-      });
+      await waitForLoaderEvent(loader, 'appenderror');
+
+      assert.deepEqual(loader.error_, error, 'loader triggered and saved the appenderror');
     });
 
     QUnit.test('appends init segments initially', async function(assert) {
@@ -1309,9 +1239,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       loader.load();
       this.clock.tick(1);
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 2, 'two appends');
@@ -1336,9 +1264,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       loader.load();
       this.clock.tick(1);
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 2, 'two appends');
@@ -1348,9 +1274,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       assert.ok(appends[1].initSegment, 'appended audio init segment');
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 4, 'two more appends');
@@ -1377,9 +1301,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       loader.load();
       this.clock.tick(1);
       standardXHRResponse(this.requests.shift(), audioSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 1, 'one append');
@@ -1387,9 +1309,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       assert.ok(appends[0].initSegment, 'appended audio init segment');
 
       standardXHRResponse(this.requests.shift(), audioSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 2, 'one more append');
@@ -1414,9 +1334,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       loader.load();
       this.clock.tick(1);
       standardXHRResponse(this.requests.shift(), audioSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 1, 'one append');
@@ -1432,9 +1350,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       standardXHRResponse(this.requests.shift(), audioSegment());
       // since it's a sync request, wait for the syncinfoupdate event (we won't get the
       // appended event)
-      await new Promise((accept, reject) => {
-        loader.on('syncinfoupdate', accept);
-      });
+      await waitForLoaderEvent(loader, 'syncinfoupdate');
       this.clock.tick(1);
 
       assert.equal(appends.length, 2, 'one more appends');
@@ -1458,9 +1374,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       loader.load();
       this.clock.tick(1);
       standardXHRResponse(this.requests.shift(), videoSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 1, 'one append');
@@ -1475,9 +1389,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       standardXHRResponse(this.requests.shift(), videoSegment());
       // since it's a sync request, wait for the syncinfoupdate event (we won't get the
       // appended event)
-      await new Promise((accept, reject) => {
-        loader.on('syncinfoupdate', accept);
-      });
+      await waitForLoaderEvent(loader, 'syncinfoupdate');
       this.clock.tick(1);
 
       assert.equal(appends.length, 2, 'one more append');
@@ -1500,9 +1412,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       loader.load();
       this.clock.tick(1);
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 2, 'two appends');
@@ -1512,9 +1422,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       assert.ok(appends[1].initSegment, 'appended audio init segment');
 
       standardXHRResponse(this.requests.shift(), muxedSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 4, 'two more appends');
@@ -1567,9 +1475,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       standardXHRResponse(this.requests.shift(), mp4AudioInitSegment());
       // segment
       standardXHRResponse(this.requests.shift(), mp4AudioSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 1, 'one append');
@@ -1580,9 +1486,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       standardXHRResponse(this.requests.shift(), mp4AudioInitSegment());
       // segment
       standardXHRResponse(this.requests.shift(), mp4AudioSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 2, 'one more append');
@@ -1595,9 +1499,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       // no init segment request, as it should be the same (and cached) segment
       standardXHRResponse(this.requests.shift(), mp4AudioSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(appends.length, 3, 'one more append');
       assert.equal(appends[2].type, 'audio', 'appended to audio buffer');
@@ -1646,9 +1548,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       standardXHRResponse(this.requests.shift(), mp4VideoInitSegment());
       // segment
       standardXHRResponse(this.requests.shift(), mp4VideoSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 1, 'one append');
@@ -1659,9 +1559,7 @@ QUnit.module('SegmentLoader', function(hooks) {
       standardXHRResponse(this.requests.shift(), mp4VideoInitSegment());
       // segment
       standardXHRResponse(this.requests.shift(), mp4VideoSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(1);
 
       assert.equal(appends.length, 2, 'one more append');
@@ -1674,9 +1572,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
       // no init segment request, as it should be the same (and cached) segment
       standardXHRResponse(this.requests.shift(), mp4VideoSegment());
-      await new Promise((accept, reject) => {
-        loader.on('appended', accept);
-      });
+      await waitForLoaderEvent(loader, 'appended');
 
       assert.equal(appends.length, 3, 'one more append');
       assert.equal(appends[2].type, 'video', 'appended to video buffer');

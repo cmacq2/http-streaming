@@ -8,6 +8,7 @@ import {
   standardXHRResponse,
   openMediaSource,
   requestAndAppendSegment,
+  waitForLoaderEvent,
   setupMediaSource
 } from './test-helpers.js';
 import manifests from './test-manifests.js';
@@ -712,9 +713,7 @@ QUnit.test('if buffered, will request second segment byte range', async function
   this.clock.tick(1);
   // segment
   this.standardXHRResponse(this.requests[1], muxedSegment());
-  await new Promise((accept, reject) => {
-    this.masterPlaylistController.mainSegmentLoader_.on('appending', accept);
-  });
+  await waitForLoaderEvent(this.masterPlaylistController.mainSegmentLoader_, 'appending');
   this.masterPlaylistController.mainSegmentLoader_.fetchAtBuffer_ = true;
   // source buffers are mocked, so must manually trigger update ends on audio and video
   // buffers
@@ -950,9 +949,7 @@ async function(assert) {
   // segment
   this.standardXHRResponse(this.requests.shift(), muxedSegment());
 
-  await new Promise((accept, reject) => {
-    this.masterPlaylistController.mainSegmentLoader_.on('appending', accept);
-  });
+  await waitForLoaderEvent(this.masterPlaylistController.mainSegmentLoader_, 'appending');
 
   assert.notOk(this.masterPlaylistController.mainSegmentLoader_.paused(),
     'segment loader not yet paused');
@@ -1247,9 +1244,7 @@ async function(assert) {
     return videojs.createTimeRanges([[0, 30]]);
   };
 
-  await new Promise((accept, reject) => {
-    this.masterPlaylistController.mainSegmentLoader_.on('appending', accept);
-  });
+  await waitForLoaderEvent(this.masterPlaylistController.mainSegmentLoader_, 'appending');
 
   // source buffers are mocked, so must manually trigger update ends on audio and video
   // buffers
@@ -1756,9 +1751,7 @@ QUnit.test('updates the duration after switching playlists', async function(asse
   // segment 0
   this.standardXHRResponse(this.requests[2], segment);
 
-  await new Promise((accept, reject) => {
-    this.masterPlaylistController.mainSegmentLoader_.on('appending', accept);
-  });
+  await waitForLoaderEvent(this.masterPlaylistController.mainSegmentLoader_, 'appending');
 
   // source buffers are mocked, so must manually trigger update ends on audio and video
   // buffers
@@ -2519,12 +2512,12 @@ QUnit.test('switches off subtitles on subtitle errors', function(assert) {
   assert.equal(textTracks[1].mode, 'showing', 'text track still showing');
 
   this.requests.shift().respond(200, null, `
-		#EXTM3U
-		#EXT-X-TARGETDURATION:10
-		#EXT-X-MEDIA-SEQUENCE:0
-		#EXTINF:10
-		0.webvtt
-		#EXT-X-ENDLIST
+    #EXTM3U
+    #EXT-X-TARGETDURATION:10
+    #EXT-X-MEDIA-SEQUENCE:0
+    #EXTINF:10
+    0.webvtt
+    #EXT-X-ENDLIST
   `);
 
   const syncController = masterPlaylistController.subtitleSegmentLoader_.syncController_;
@@ -3449,16 +3442,16 @@ function(assert) {
   // since the safe live end will be 3 target durations back, in order for there to be a
   // positive seekable end, there should be at least 4 segments
   this.requests.shift().respond(200, null, `
-		#EXTM3U
-		#EXT-X-TARGETDURATION:5
-		#EXTINF:5
-		0.ts
-		#EXTINF:5
-		1.ts
-		#EXTINF:5
-		2.ts
-		#EXTINF:5
-		3.ts
+    #EXTM3U
+    #EXT-X-TARGETDURATION:5
+    #EXTINF:5
+    0.ts
+    #EXTINF:5
+    1.ts
+    #EXTINF:5
+    2.ts
+    #EXTINF:5
+    3.ts
   `);
 
   assert.equal(mpc.seekable().end(0), 5, 'calculated seekable end');
@@ -3479,12 +3472,12 @@ function(assert) {
   assert.notOk(mpc.mediaSource.duration, 'no duration set on media source');
 
   this.requests.shift().respond(200, null, `
-		#EXTM3U
-		#EXT-X-TARGETDURATION:5
-		#EXTINF:5
-		0.ts
-		#EXTINF:5
-		1.ts
+    #EXTM3U
+    #EXT-X-TARGETDURATION:5
+    #EXTINF:5
+    0.ts
+    #EXTINF:5
+    1.ts
     #EXT-X-ENDLIST
   `);
 
@@ -3506,12 +3499,12 @@ function(assert) {
   assert.notOk(mpc.mediaSource.duration, 'no duration set on media source');
 
   this.requests.shift().respond(200, null, `
-		#EXTM3U
-		#EXT-X-TARGETDURATION:5
-		#EXTINF:5
-		0.ts
-		#EXTINF:5
-		1.ts
+    #EXTM3U
+    #EXT-X-TARGETDURATION:5
+    #EXTINF:5
+    0.ts
+    #EXTINF:5
+    1.ts
     #EXT-X-ENDLIST
   `);
 

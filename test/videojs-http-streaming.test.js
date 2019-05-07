@@ -12,7 +12,8 @@ import {
   standardXHRResponse,
   absoluteUrl,
   requestAndAppendSegment,
-  disposePlaybackWatcher
+  disposePlaybackWatcher,
+  waitForLoaderEvent
 } from './test-helpers.js';
 /* eslint-disable no-unused-vars */
 // we need this so that it can register hls with videojs
@@ -183,9 +184,7 @@ QUnit.test('stats are reset on each new source', async function(assert) {
   // segment 0
   this.standardXHRResponse(this.requests.shift(), segment);
 
-  await new Promise((accept, reject) => {
-    this.player.vhs.masterPlaylistController_.mainSegmentLoader_.on('appending', accept);
-  });
+  await waitForLoaderEvent(this.player.vhs.masterPlaylistController_.mainSegmentLoader_, 'appending');
 
   assert.equal(this.player.tech_.hls.stats.mediaBytesTransferred,
                segmentByteLength,
@@ -356,9 +355,7 @@ QUnit.test('codecs are passed to the source buffer', async function(assert) {
   this.standardXHRResponse(this.requests.shift(), muxedSegment());
 
   // source buffer won't be created until we have our first segment
-  await new Promise((accept, reject) => {
-    this.player.vhs.masterPlaylistController_.mainSegmentLoader_.on('appending', accept);
-  });
+  await waitForLoaderEvent(this.player.vhs.masterPlaylistController_.mainSegmentLoader_, 'appending');
 
   // always create separate audio and video source buffers
   assert.equal(codecs.length, 2, 'created two source buffers');
@@ -516,9 +513,7 @@ QUnit.test('starts downloading a segment on loadedmetadata', async function(asse
                      absoluteUrl('manifest/media-00001.ts'),
                      'the first segment is requested');
 
-  await new Promise((accept, reject) => {
-    this.player.vhs.masterPlaylistController_.mainSegmentLoader_.on('appending', accept);
-  });
+  await waitForLoaderEvent(this.player.vhs.masterPlaylistController_.mainSegmentLoader_, 'appending');
 
   // verify stats
   assert.equal(this.player.tech_.hls.stats.mediaBytesTransferred,
@@ -684,9 +679,7 @@ QUnit.test('downloads media playlists after loading the master', async function(
                      absoluteUrl('manifest/media2-00001.ts'),
                      'first segment requested');
 
-  await new Promise((accept, reject) => {
-    this.player.vhs.masterPlaylistController_.mainSegmentLoader_.on('appending', accept);
-  });
+  await waitForLoaderEvent(this.player.vhs.masterPlaylistController_.mainSegmentLoader_, 'appending');
 
   // verify stats
   assert.equal(this.player.tech_.hls.stats.mediaBytesTransferred,
@@ -2404,9 +2397,7 @@ QUnit.test('calling play() at the end of a video replays', async function(assert
   // segment 0
   this.standardXHRResponse(this.requests.shift(), segment);
 
-  await new Promise((accept, reject) => {
-    this.player.vhs.masterPlaylistController_.mainSegmentLoader_.on('appending', accept);
-  });
+  await waitForLoaderEvent(this.player.vhs.masterPlaylistController_.mainSegmentLoader_, 'appending');
 
   this.player.tech_.ended = function() {
     return true;
@@ -4033,9 +4024,7 @@ QUnit.test('stats are reset on dispose', async function(assert) {
   // segment 0
   this.standardXHRResponse(this.requests.shift(), segment);
 
-  await new Promise((accept, reject) => {
-    hls.masterPlaylistController_.mainSegmentLoader_.on('appending', accept);
-  });
+  await waitForLoaderEvent(hls.masterPlaylistController_.mainSegmentLoader_, 'appending');
 
   assert.equal(hls.stats.mediaBytesTransferred, segmentByteLength, 'stat is set');
   hls.dispose();
