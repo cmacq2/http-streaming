@@ -1542,7 +1542,7 @@ export default class SegmentLoader extends videojs.EventTarget {
     });
 
     const videoSegmentTimingInfoCallback =
-      this.handleVideoSegmentTimingInfo_.bind(this, initSegment.requestId)
+      this.handleVideoSegmentTimingInfo_.bind(this, initSegment.requestId);
 
     this.sourceUpdater_.appendBuffer({type, bytes, videoSegmentTimingInfoCallback}, (error) => {
       if (error) {
