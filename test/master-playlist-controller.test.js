@@ -2082,13 +2082,11 @@ QUnit.test('calls to update cues on new media', function(assert) {
     callCount++;
   };
 
-  console.log(this.requests[0].url);
   // master
   this.standardXHRResponse(this.requests.shift());
 
   assert.equal(callCount, 0, 'no call to update cues on master');
 
-  console.log(this.requests[0].url);
   // media
   this.standardXHRResponse(this.requests.shift());
 

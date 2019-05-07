@@ -18,7 +18,7 @@ let playFor = function(player, time, cb) {
   when(player, 'timeupdate', cb, () => player.currentTime() >= targetTime);
 };
 
-QUnit.skip('Playback', {
+QUnit.module('Playback', {
   before() {
     this.fixture = document.createElement('div');
     document.body.appendChild(this.fixture);
