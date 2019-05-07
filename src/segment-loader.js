@@ -1523,7 +1523,7 @@ export default class SegmentLoader extends videojs.EventTarget {
     return null;
   }
 
-  appendToSourceBuffer_({ type, initSegment, data }) {
+  appendToSourceBuffer_({ segmentInfo, type, initSegment, data }) {
     const segments = [data];
     let byteLength = data.byteLength;
 
@@ -1542,7 +1542,7 @@ export default class SegmentLoader extends videojs.EventTarget {
     });
 
     const videoSegmentTimingInfoCallback =
-      this.handleVideoSegmentTimingInfo_.bind(this, initSegment.requestId);
+      this.handleVideoSegmentTimingInfo_.bind(this, segmentInfo.requestId);
 
     this.sourceUpdater_.appendBuffer({type, bytes, videoSegmentTimingInfoCallback}, (error) => {
       if (error) {
@@ -1599,7 +1599,7 @@ export default class SegmentLoader extends videojs.EventTarget {
       map: segmentInfo.segment.map
     });
 
-    this.appendToSourceBuffer_({ type, initSegment, data });
+    this.appendToSourceBuffer_({ segmentInfo, type, initSegment, data });
   }
 
   /**
@@ -1853,6 +1853,9 @@ export default class SegmentLoader extends videojs.EventTarget {
         (isEndOfStream || (isWalkingForward && isDiscontinuity))) {
       segmentTransmuxer.endTimeline(this.transmuxer_);
     }
+
+    // used for testing
+    this.trigger('appending');
 
     this.waitForAppendsToComplete_(segmentInfo);
   }

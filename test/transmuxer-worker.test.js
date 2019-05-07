@@ -70,8 +70,7 @@ QUnit.test('push should result in a trackinfo event', function(assert) {
   });
 });
 
-QUnit.test('flush should return data from transmuxer',
-  function(assert) {
+QUnit.test('flush should return data from transmuxer', function(assert) {
   const testDone = assert.async();
   const messages = [];
   const handleMessages = (e) => {
@@ -86,6 +85,7 @@ QUnit.test('flush should return data from transmuxer',
       [
         'trackinfo',
         'gopInfo',
+        'videoSegmentTimingInfo',
         'videoTimingInfo',
         'data',
         'audioTimingInfo',

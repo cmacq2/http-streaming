@@ -273,6 +273,9 @@ export default class VTTSegmentLoader extends SegmentLoader {
 
     this.state = 'APPENDING';
 
+    // used for tests
+    this.trigger('appending');
+
     let segmentInfo = this.pendingSegment_;
     let segment = segmentInfo.segment;
 

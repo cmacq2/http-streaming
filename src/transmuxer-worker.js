@@ -121,7 +121,7 @@ const wireFullTransmuxerEvents = function(self, transmuxer) {
   });
 };
 
-const wirePartialTransmuxerEvents = function(transmuxer) {
+const wirePartialTransmuxerEvents = function(self, transmuxer) {
   transmuxer.on('data', function(event) {
     // transfer ownership of the underlying ArrayBuffer
     // instead of doing a copy to save memory

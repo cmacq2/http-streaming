@@ -476,6 +476,27 @@ export const createResponseText = function(length) {
   return responseText;
 };
 
+export const waitForLoaderEvent = function(loader, eventName) {
+  return new Promise((resolve, reject) => {
+    let onFailure = () => {};
+    const onSuccess = () => {
+      loader.off(eventName, onSuccess)
+      loader.off('error', onFailure)
+      resolve();
+    };
+
+    if (eventName !== 'error') {
+      onFailure = () => {
+        loader.off(eventName, onSuccess)
+        loader.off('error', onFailure)
+        reject(loader.error());
+      };
+    }
+    loader.on(eventName, onSuccess);
+    loader.on('error', onFailure);
+  });
+};
+
 /*
  * Helper method to request and append a segment (from XHR to source buffers).
  *
@@ -553,27 +574,6 @@ export const requestAndAppendSegment = async function({
   if (tickClock) {
     clock.tick(1);
   }
-};
-
-export const waitForLoaderEvent = function(loader, eventName) {
-  return new Promise((resolve, reject) => {
-    let onFailure = () => {};
-    const onSuccess = () => {
-      loader.off(eventName, onSuccess)
-      loader.off('error', onFailure)
-      resolve();
-    };
-
-    if (eventName !== 'error') {
-      onFailure = () => {
-        loader.off(eventName, onSuccess)
-        loader.off('error', onFailure)
-        reject(loader.error());
-      };
-    }
-    loader.on(eventName, onSuccess);
-    loader.on('error', onFailure);
-  });
 };
 
 export const disposePlaybackWatcher = (player) => {

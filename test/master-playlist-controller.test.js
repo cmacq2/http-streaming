@@ -85,7 +85,11 @@ QUnit.test('throws error when given an empty URL', function(assert) {
     tech: this.player.tech_
   };
 
-  assert.ok(new MasterPlaylistController(options), 'can create with options');
+  const controller = new MasterPlaylistController(options);
+
+  assert.ok(controller, 'can create with options');
+
+  controller.dispose();
 
   options.url = '';
   assert.throws(() => {
@@ -134,6 +138,8 @@ QUnit.test('passes options to PlaylistLoader', function(assert) {
   assert.notOk(controller.masterPlaylistLoader_.withCredentials, 'credentials wont be sent by default');
   assert.notOk(controller.masterPlaylistLoader_.handleManifestRedirects, 'redirects are ignored by default');
 
+  controller.dispose();
+
   controller = new MasterPlaylistController(Object.assign({
     withCredentials: true,
     handleManifestRedirects: true
@@ -141,6 +147,7 @@ QUnit.test('passes options to PlaylistLoader', function(assert) {
 
   assert.ok(controller.masterPlaylistLoader_.withCredentials, 'withCredentials enabled');
   assert.ok(controller.masterPlaylistLoader_.handleManifestRedirects, 'handleManifestRedirects enabled');
+  controller.dispose();
 });
 
 QUnit.test('obeys metadata preload option', function(assert) {
@@ -170,11 +177,13 @@ QUnit.test('creates appropriate PlaylistLoader for sourceType', function(assert)
   assert.ok(mpc.masterPlaylistLoader_ instanceof PlaylistLoader,
             'created a standard playlist loader');
 
+  mpc.dispose();
   options.sourceType = 'dash';
   mpc = new MasterPlaylistController(options);
 
   assert.ok(mpc.masterPlaylistLoader_ instanceof DashPlaylistLoader,
             'created a dash playlist loader');
+  mpc.dispose();
 });
 
 QUnit.test('passes options to SegmentLoader', function(assert) {
@@ -188,6 +197,8 @@ QUnit.test('passes options to SegmentLoader', function(assert) {
   assert.notOk(controller.mainSegmentLoader_.bandwidth, "bandwidth won't be set by default");
   assert.notOk(controller.mainSegmentLoader_.sourceType_, "sourceType won't be set by default");
   assert.notOk(controller.mainSegmentLoader_.cacheEncryptionKeys_, "cacheEncryptionKeys won't be set by default");
+
+  controller.dispose();
 
   controller = new MasterPlaylistController(Object.assign({
     bandwidth: 3,
@@ -210,6 +221,9 @@ QUnit.test('passes options to SegmentLoader', function(assert) {
     true,
     'cacheEncryptionKeys will be set'
   );
+
+  controller.dispose();
+
 });
 
 QUnit.test('resets SegmentLoader when seeking out of buffer',
@@ -251,6 +265,7 @@ QUnit.test('selects lowest bitrate rendition when enableLowInitialPlaylist is se
     // Set requests.length to 0, otherwise it will use the requests generated in the
     // beforeEach function
     this.requests.length = 0;
+    this.player.dispose();
     this.player = createPlayer({ html5: { hls: { enableLowInitialPlaylist: true } } });
 
     this.player.src({
@@ -303,9 +318,11 @@ QUnit.test('resyncs SegmentLoader for a smooth quality change', function(assert)
   this.standardXHRResponse(this.requests.shift());
 
   let segmentLoader = this.masterPlaylistController.mainSegmentLoader_;
+  const originalResync = segmentLoader.resyncLoader;
 
   segmentLoader.resyncLoader = function() {
     resyncs++;
+    originalResync.call(segmentLoader);
   };
 
   this.masterPlaylistController.selectPlaylist = () => {
@@ -331,9 +348,11 @@ QUnit.test('does not resync the segmentLoader when no smooth quality change occu
     this.masterPlaylistController.mediaSource.trigger('sourceopen');
 
     let segmentLoader = this.masterPlaylistController.mainSegmentLoader_;
+    const originalResync = segmentLoader.resyncLoader;
 
     segmentLoader.resyncLoader = function() {
       resyncs++;
+      originalResync.call(segmentLoader);
     };
 
     this.masterPlaylistController.smoothQualityChange_();
@@ -345,6 +364,7 @@ QUnit.test('does not resync the segmentLoader when no smooth quality change occu
 
 QUnit.test('smooth quality change resyncs audio segment loader', function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'alternate-audio-multiple-groups.m3u8',
@@ -379,7 +399,13 @@ QUnit.test('smooth quality change resyncs audio segment loader', function(assert
     realReset.call(this);
   };
 
-  masterPlaylistController.audioSegmentLoader_.resyncLoader = () => resyncs++;
+  const originalResync = masterPlaylistController.audioSegmentLoader_.resyncLoader;
+
+  masterPlaylistController.audioSegmentLoader_.resyncLoader = function() {
+    resyncs++;
+    originalResync.call(masterPlaylistController.audioSegmentLoader_);
+  };
+
   masterPlaylistController.smoothQualityChange_();
   assert.equal(resyncs, 0, 'does not resync the audio segment loader when media same');
 
@@ -426,14 +452,18 @@ QUnit.test('resets everything for a fast quality change', function(assert) {
   this.standardXHRResponse(this.requests.shift());
 
   let segmentLoader = this.masterPlaylistController.mainSegmentLoader_;
+  const originalResync = segmentLoader.resyncLoader;
 
-  segmentLoader.resyncLoader = () => resyncs++;
+  segmentLoader.resyncLoader = function() {
+    resyncs++;
+    originalResync.call(segmentLoader);
+  };
 
-  const origResetEverything = segmentLoader.resetEverything.bind(segmentLoader);
+  const origResetEverything = segmentLoader.resetEverything;
 
   segmentLoader.resetEverything = () => {
     resets++;
-    origResetEverything();
+    origResetEverything.call(segmentLoader);
   };
 
   segmentLoader.remove = function(start, end) {
@@ -624,6 +654,7 @@ async function(assert) {
 
 QUnit.test('audio segment loader is reset on audio track change', function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'alternate-audio-multiple-groups.m3u8',
@@ -653,7 +684,13 @@ QUnit.test('audio segment loader is reset on audio track change', function(asser
     resets++;
     realReset.call(this);
   };
-  masterPlaylistController.audioSegmentLoader_.resyncLoader = () => resyncs++;
+
+  const originalResync = masterPlaylistController.audioSegmentLoader_.resyncLoader;
+
+  masterPlaylistController.audioSegmentLoader_.resyncLoader = function() {
+    resyncs++;
+    originalResync.call(this);
+  };
 
   assert.equal(this.requests.length, 3, 'three requests');
   assert.ok(this.requests[0].url.endsWith('eng/prog_index.m3u8'),
@@ -2027,9 +2064,11 @@ QUnit.test('calls to update cues on new media', function(assert) {
     useCueTags: true
   };
 
+  this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
-    src: 'manifest/media.m3u8',
+    src: 'manifest/master.m3u8',
     type: 'application/vnd.apple.mpegurl'
   });
 
@@ -2039,13 +2078,17 @@ QUnit.test('calls to update cues on new media', function(assert) {
 
   let callCount = 0;
 
-  this.masterPlaylistController.updateAdCues_ = (media) => callCount++;
+  this.masterPlaylistController.updateAdCues_ = (media) => {
+    callCount++;
+  };
 
+  console.log(this.requests[0].url);
   // master
   this.standardXHRResponse(this.requests.shift());
 
   assert.equal(callCount, 0, 'no call to update cues on master');
 
+  console.log(this.requests[0].url);
   // media
   this.standardXHRResponse(this.requests.shift());
 
@@ -2093,6 +2136,8 @@ QUnit.test('respects useCueTags option', function(assert) {
     useCueTags: true
   };
 
+  this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.tech_.on('usage', (event) => {
     if (event.name === 'hls-playlist-cue-tags') {
@@ -2124,6 +2169,7 @@ QUnit.test('respects useCueTags option', function(assert) {
 
 QUnit.test('correctly sets alternate audio track kinds', function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/alternate-audio-accessibility.m3u8',
@@ -2162,6 +2208,7 @@ QUnit.test('trigger events when video and audio is demuxed by default', function
   let hlsDemuxedEvents = 0;
 
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/multipleAudioGroups.m3u8',
@@ -2211,6 +2258,7 @@ QUnit.test('trigger event when a video fMP4 stream is detected', async function(
   // use real media sources to allow segment loader to naturally detect fmp4
   this.mse.restore();
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'prog_index.m3u8',
@@ -2291,6 +2339,7 @@ QUnit.skip('trigger event when an audio fMP4 stream is detected', async function
   // use real media sources to allow segment loader to naturally detect fmp4
   this.mse.restore();
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'prog_index.m3u8',
@@ -2341,6 +2390,7 @@ QUnit.skip('trigger event when an audio fMP4 stream is detected', async function
 QUnit.test('adds only CEA608 closed-caption tracks when a master playlist is loaded',
 function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master-captions.m3u8',
@@ -2397,6 +2447,7 @@ QUnit.test('adds subtitle tracks when a media playlist is loaded', function(asse
   let hlsWebvttEvents = 0;
 
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master-subtitles.m3u8',
@@ -2457,6 +2508,7 @@ QUnit.test('adds subtitle tracks when a media playlist is loaded', function(asse
 
 QUnit.test('switches off subtitles on subtitle errors', function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master-subtitles.m3u8',
@@ -2541,6 +2593,7 @@ QUnit.test('switches off subtitles on subtitle errors', function(assert) {
 
 QUnit.test('pauses subtitle segment loader on tech errors', function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master-subtitles.m3u8',
@@ -2580,6 +2633,7 @@ QUnit.test('pauses subtitle segment loader on tech errors', function(assert) {
 
 QUnit.test('disposes subtitle loaders on dispose', function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master-subtitles.m3u8',
@@ -2605,6 +2659,7 @@ QUnit.test('disposes subtitle loaders on dispose', function(assert) {
   assert.equal(segmentLoaderDisposeCount, 1, 'disposed the subtitle segment loader');
 
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master-subtitles.m3u8',
@@ -2655,6 +2710,7 @@ QUnit.test('disposes subtitle loaders on dispose', function(assert) {
 
 QUnit.test('subtitle segment loader resets on seeks', function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master-subtitles.m3u8',
@@ -2785,6 +2841,7 @@ QUnit.test('calculates dynamic BUFFER_LOW_WATER_LINE', function(assert) {
 QUnit.test('creates source buffers after first main segment if muxed content',
 async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -2830,6 +2887,7 @@ async function(assert) {
 QUnit.test('creates source buffers after first main segment if audio only',
 async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -2876,6 +2934,7 @@ async function(assert) {
 QUnit.test('creates source buffers after first main segment if video only',
 async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -2926,6 +2985,7 @@ async function(assert) {
 QUnit.test('creates source buffers after first main segment if demuxed',
 async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -2983,6 +3043,7 @@ async function(assert) {
 QUnit.test('uses codec info from manifest for source buffer creation',
 async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -3032,6 +3093,7 @@ QUnit.test('translates old-school apple codec strings from manifest to modern st
 'for source buffer creation',
 async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -3080,6 +3142,7 @@ async function(assert) {
 QUnit.test('uses default codec strings when provided are invalid',
 async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -3128,6 +3191,7 @@ async function(assert) {
 QUnit.test('uses codec info from manifest for source buffer creation even when demuxed',
 async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -3183,6 +3247,7 @@ async function(assert) {
 QUnit.test('uses codec info from manifest for source buffer creation for audio only',
 async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -3232,6 +3297,7 @@ async function(assert) {
 QUnit.test('uses codec info from manifest for source buffer creation for video only',
 async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -3283,6 +3349,7 @@ async function(assert) {
 QUnit.test('uses available audio codec info from manifest plus video default for source' +
 'buffer creation if content looks different from codec info', async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
@@ -3335,6 +3402,7 @@ QUnit.test('uses available audio codec info from manifest plus video default for
 QUnit.test('uses available video codec info from manifest plus audio default for source' +
 'buffer creation if content looks different from codec info', async function(assert) {
   this.requests.length = 0;
+  this.player.dispose();
   this.player = createPlayer();
   this.player.src({
     src: 'manifest/master.m3u8',
