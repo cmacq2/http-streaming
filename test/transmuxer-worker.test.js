@@ -104,6 +104,10 @@ QUnit.test('flush should return data from transmuxer', function(assert) {
       'returns gopInfo with gopInfo event'
     );
     assert.ok(
+      messages.shift().videoSegmentTimingInfo,
+      'returns timing information with videoSegmentTimingInfo event'
+    );
+    assert.ok(
       messages.shift().videoTimingInfo,
       'returns timing information with videoTimingInfo event'
     );
@@ -254,6 +258,7 @@ QUnit.test('caption events are returned', function(assert) {
         .filter((y) => y !== 'trackinfo'),
       [
         'gopInfo',
+        'videoSegmentTimingInfo',
         'videoTimingInfo',
         'data',
         'caption',
@@ -275,16 +280,21 @@ QUnit.test('caption events are returned', function(assert) {
       messages[24].gopInfo,
       'gopInfo event has gopInfo'
     );
+
     assert.ok(
-      messages[25].videoTimingInfo,
+      messages[25].videoSegmentTimingInfo,
+      'videoSegmentTimingInfo event has timing info'
+    );
+    assert.ok(
+      messages[26].videoTimingInfo,
       'videoTimingInfo event has timing info'
     );
     assert.ok(
-      messages[26].segment.data.byteLength > 0,
+      messages[27].segment.data.byteLength > 0,
       'data event returns data'
     );
     assert.deepEqual(
-      messages[27].caption,
+      messages[28].caption,
       {
         text: 'Bip!',
         stream: 'CC1',

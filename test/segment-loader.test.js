@@ -163,6 +163,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
     nestedHooks.afterEach(function(assert) {
       this.startTime.restore();
+      loader.dispose();
     });
 
     QUnit.test('load waits until a playlist is specified to proceed', function(assert) {
@@ -268,6 +269,8 @@ QUnit.module('SegmentLoader', function(hooks) {
         new Uint32Array([1, 2, 3, 4]),
         'key has been cached'
       );
+
+       newLoader.dispose();
     });
 
     QUnit.test('segmentKey will not cache encrypted keys with cacheEncryptionKeys false', function(assert) {
@@ -302,6 +305,7 @@ QUnit.module('SegmentLoader', function(hooks) {
         0,
         'no keys have been cached since cacheEncryptionKeys is false'
       );
+      newLoader.dispose();
     });
 
     QUnit.test('new segment requests will use cached keys', function(assert) {
@@ -364,6 +368,7 @@ QUnit.module('SegmentLoader', function(hooks) {
         assert.strictEqual(this.requests[0].uri, '1.ts', 'only segment request');
         done();
       };
+      newLoader.dispose();
     });
 
     QUnit.test('triggers syncinfoupdate before attempting a resync',
@@ -1508,6 +1513,8 @@ QUnit.module('SegmentLoader', function(hooks) {
         appends[0].initSegment,
         appends[2].initSegment,
         'reused the init segment');
+
+      loader.dispose();
     });
 
     QUnit.test('stores and reuses video init segments from map tag',

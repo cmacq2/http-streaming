@@ -64,6 +64,7 @@ export const LoaderCommonHooks = {
   afterEach(assert) {
     this.env.restore();
     this.decrypter.terminate();
+    this.sourceUpdater.dispose();
   }
 };
 
@@ -122,7 +123,9 @@ export const LoaderCommonFactory = (LoaderConstructor,
       }
     });
 
-    hooks.afterEach(function(assert) {});
+    hooks.afterEach(function(assert) {
+      loader.dispose();
+    });
 
     QUnit.test('fails without required initialization options', function(assert) {
       /* eslint-disable no-new */
