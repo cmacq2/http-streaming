@@ -1396,9 +1396,17 @@ export default class SegmentLoader extends videojs.EventTarget {
       return;
     }
 
+    // if this request included an initialization segment, save that data
+    // to the initSegment cache
     if (simpleSegment.map) {
+      simpleSegment.map = this.initSegmentForMap(simpleSegment.map, true);
       // move the map bytes onto the segment loader's segment state object
       segmentInfo.segment.map.bytes = simpleSegment.map.bytes;
+    }
+
+    // if this request included a segment key, save that data in the cache
+    if (simpleSegment.key) {
+      this.segmentKey(simpleSegment.key, true);
     }
 
     if (simpleSegment.isFmp4) {
@@ -1717,11 +1725,6 @@ export default class SegmentLoader extends videojs.EventTarget {
 
     if (segment.map) {
       simpleSegment.map = this.initSegmentForMap(segment.map);
-    }
-
-    // if this request included a segment key, save that data in the cache
-    if (simpleSegment.key) {
-      this.segmentKey(simpleSegment.key, true);
     }
 
     return simpleSegment;

@@ -227,25 +227,27 @@ QUnit.module('SegmentLoader', function(hooks) {
                    'segment end time not shifted by mp4 start time');
     });
 
-     QUnit.test('segmentKey will cache new encrypted keys with cacheEncryptionKeys true', function(assert) {
-      const newLoader = new SegmentLoader(LoaderCommonSettings.call(this, {
+     QUnit.test('segmentKey will cache new encrypted keys with cacheEncryptionKeys true', async function(assert) {
+      loader.dispose();
+      loader = new SegmentLoader(LoaderCommonSettings.call(this, {
         loaderType: 'main',
-        segmentMetadataTrack: this.segmentMetadataTrack,
+        segmentMetadataTrack: this.segmentMetadataTrack
         cacheEncryptionKeys: true
       }), {});
 
-      newLoader.playlist(playlistWithDuration(10), { isEncrypted: true });
-      newLoader.mimeType(this.mimeType);
-      newLoader.load();
+      await setupMediaSource(loader.mediaSource_, loader.sourceUpdater_);
+
+      loader.playlist(playlistWithDuration(10), { isEncrypted: true });
+      loader.load();
       this.clock.tick(1);
 
       assert.strictEqual(
-        Object.keys(newLoader.keyCache_).length,
+        Object.keys(loader.keyCache_).length,
         0,
         'no keys have been cached'
       );
 
-      const result = newLoader.segmentKey({
+      const result = loader.segmentKey({
         resolvedUri: 'key.php',
         bytes: new Uint32Array([1, 2, 3, 4])
       });
@@ -256,7 +258,7 @@ QUnit.module('SegmentLoader', function(hooks) {
         'gets by default'
       );
 
-      newLoader.segmentKey(
+      loader.segmentKey(
         {
           resolvedUri: 'key.php',
           bytes: new Uint32Array([1, 2, 3, 4])
@@ -265,12 +267,12 @@ QUnit.module('SegmentLoader', function(hooks) {
       );
 
       assert.deepEqual(
-        newLoader.keyCache_['key.php'].bytes,
+        loader.keyCache_['key.php'].bytes,
         new Uint32Array([1, 2, 3, 4]),
         'key has been cached'
       );
 
-       newLoader.dispose();
+       loader.dispose();
     });
 
     QUnit.test('segmentKey will not cache encrypted keys with cacheEncryptionKeys false', function(assert) {
@@ -1439,6 +1441,7 @@ QUnit.module('SegmentLoader', function(hooks) {
 
     QUnit.test('stores and reuses audio init segments from map tag',
     async function(assert) {
+      loader.dispose();
       loader = new SegmentLoader(LoaderCommonSettings.call(this, {
         loaderType: 'audio',
         segmentMetadataTrack: this.segmentMetadataTrack
