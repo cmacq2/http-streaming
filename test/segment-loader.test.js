@@ -11,7 +11,8 @@ import {
   playlistWithDuration,
   standardXHRResponse,
   setupMediaSource,
-  waitForLoaderEvent
+  waitForLoaderEvent,
+  MockTextTrack
 } from './test-helpers.js';
 import {
   LoaderCommonHooks,
@@ -1587,7 +1588,6 @@ QUnit.module('SegmentLoader', function(hooks) {
   });
 });
 
-/* TODO brandonocasey
 QUnit.module('SegmentLoader: FMP4', function(hooks) {
   hooks.beforeEach(LoaderCommonHooks.beforeEach);
   hooks.afterEach(LoaderCommonHooks.afterEach);
@@ -1604,7 +1604,6 @@ QUnit.module('SegmentLoader: FMP4', function(hooks) {
         CC1: new MockTextTrack()
       };
       this.startTime = sinon.stub(mp4probe, 'startTime');
-      this.mimeType = 'video/mp4';
 
       loader = new SegmentLoader(LoaderCommonSettings.call(this, {
         loaderType: 'main',
@@ -1624,8 +1623,8 @@ QUnit.module('SegmentLoader: FMP4', function(hooks) {
       this.startTime.restore();
     });
 
-    QUnit.skip('CaptionParser is handled as expected',
-    function(assert) {
+    QUnit.test('CaptionParser is handled as expected', async function(assert) {
+      await setupMediaSource(loader.mediaSource_, loader.sourceUpdater_);
       let mockCaptionParserReset;
       let mockCaptionParserClear;
       let mockCaptionParserClearParsedCaptions;
@@ -1643,7 +1642,6 @@ QUnit.module('SegmentLoader: FMP4', function(hooks) {
       loader.playlist(playlistWithDuration(10, 'm4s'));
       assert.equal(this.requests.length, 0, 'have not made a request yet');
 
-      loader.mimeType(this.mimeType);
       this.clock.tick(1);
       assert.equal(this.requests.length, 1, 'made a request');
       assert.equal(mockCaptionParserClear.callCount, 2, 'captions cleared on load and mimeType');
@@ -1664,6 +1662,8 @@ QUnit.module('SegmentLoader: FMP4', function(hooks) {
         endTime: 2,
         text: 'test'
       });
+      // set startingMedia_
+      loader.startingMedia_ = {hasVideo: true, hasAudio: true};
       loader.remove(0, 2);
       assert.equal(this.inbandTextTracks.CC1.cues.length, 0, 'all cues have been removed');
 
@@ -1676,12 +1676,6 @@ QUnit.module('SegmentLoader: FMP4', function(hooks) {
           bytes: new Uint8Array([0, 0, 1])
         },
         endOfAllRequests: 0,
-        fmp4Captions: [{
-          startTime: 1,
-          endTime: 2,
-          text: 'test',
-          stream: 'CC1'
-        }],
         captionStreams: {
           CC1: true
         }
@@ -1693,9 +1687,22 @@ QUnit.module('SegmentLoader: FMP4', function(hooks) {
           syncInfo: null
         }
       };
-      loader.processSegmentResponse_(segment);
+      // prevent request from being made
+      loader.loadSegment_ = (simpleSegment) => {
+        // mock request finish
+        loader.pendingSegment_.requestId = simpleSegment.requestId
+        loader.pendingSegment_.hasAppendedData_ = true;
+        // captions were found in the request
+        loader.handleCaptions_(simpleSegment, [{
+          startTime: 1,
+          endTime: 2,
+          text: 'test',
+          stream: 'CC1'
+        }]);
+      };
+      loader.fillBuffer_();
       assert.ok(this.inbandTextTracks.CC1, 'text track created');
-      assert.ok(this.inbandTextTracks.CC1.cues.length, 1, 'cue added');
+      assert.equal(this.inbandTextTracks.CC1.cues.length, 1, 'cue added');
       assert.equal(mockCaptionParserClearParsedCaptions.callCount, 1, 'captions cleared after adding to text track');
       loader.pendingSegment_ = originalPendingSegment;
 
@@ -1705,4 +1712,3 @@ QUnit.module('SegmentLoader: FMP4', function(hooks) {
     });
   });
 });
-*/

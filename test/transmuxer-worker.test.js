@@ -557,8 +557,7 @@ QUnit.test('reset will clear transmuxer', function(assert) {
   });
 });
 
-QUnit.test('endTimeline will return unflushed data',
-  function(assert) {
+QUnit.test('endTimeline will return unflushed data', function(assert) {
   const done = assert.async();
   const messages = [];
 
