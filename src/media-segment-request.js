@@ -221,6 +221,24 @@ const handleSegmentResponse = ({
     segment.bytes = new Uint8Array(newBytes);
   }
 
+  // This is likely an FMP4 and has the init segment.
+  // Run through the CaptionParser in case there are captions.
+  if (captionParser && segment.map && segment.map.bytes) {
+    // Initialize CaptionParser if it hasn't been yet
+    if (!captionParser.isInitialized()) {
+      captionParser.init();
+    }
+
+    const parsed = captionParser.parse(
+      segment.bytes,
+      segment.map.videoTrackIds,
+      segment.map.timescales);
+
+    if (parsed && parsed.captions && parsed.captions.length > 0) {
+      captionsFn(segment, parsed.captions);
+    }
+  }
+
   return finishProcessingFn(null, segment);
 };
 
@@ -356,7 +374,7 @@ const handleSegmentBytes = ({
 
     // Run through the CaptionParser in case there are captions.
     // Initialize CaptionParser if it hasn't been yet
-    if (captionParser && !captionParser.isInitialized()) {
+    if (captionParser && segment.map && segment.map.bytes) {
       if (!captionParser.isInitialized()) {
         captionParser.init();
       }
