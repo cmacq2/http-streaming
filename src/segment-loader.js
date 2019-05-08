@@ -2107,6 +2107,13 @@ export default class SegmentLoader extends videojs.EventTarget {
 
     const isWalkingForward = this.mediaIndex !== null;
 
+    // any time an update finishes and the last segment is in the
+    // buffer, end the stream. this ensures the "ended" event will
+    // fire if playback reaches that point.
+    if (this.isEndOfStream_(segmentInfo.mediaIndex + 1, segmentInfo.playlist)) {
+      this.endOfStream();
+    }
+
     // Don't do a rendition switch unless we have enough time to get a sync segment
     // and conservatively guess
     if (isWalkingForward) {
@@ -2118,13 +2125,6 @@ export default class SegmentLoader extends videojs.EventTarget {
 
     // used for testing
     this.trigger('appended');
-
-    // any time an update finishes and the last segment is in the
-    // buffer, end the stream. this ensures the "ended" event will
-    // fire if playback reaches that point.
-    if (this.isEndOfStream_(segmentInfo.mediaIndex + 1, segmentInfo.playlist)) {
-      this.endOfStream();
-    }
 
     if (!this.paused()) {
       this.monitorBuffer_();
