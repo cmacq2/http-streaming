@@ -832,22 +832,11 @@ QUnit.module('SegmentLoader', function(hooks) {
       assert.equal(endOfStreams, 1, 'triggered ended');
     });
 
-    QUnit.test('endOfStream does not happen while sourceUpdater is updating', function(assert) {
+    QUnit.test('endOfStream does not happen while sourceUpdater is updating',
+    async function(assert) {
+      await setupMediaSource(loader.mediaSource_, loader.sourceUpdater_);
       let endOfStreams = 0;
       let bandwidthupdates = 0;
-      let buffered = videojs.createTimeRanges();
-
-      loader.buffered_ = () => buffered;
-
-      loader.playlist(playlistWithDuration(20));
-      loader.mimeType(this.mimeType);
-      loader.load();
-      this.clock.tick(1);
-
-      loader.mediaSource_ = {
-        readyState: 'open',
-        sourceBuffers: this.mediaSource.sourceBuffers
-      };
 
       loader.on('ended', () => endOfStreams++);
 
@@ -857,21 +846,21 @@ QUnit.module('SegmentLoader', function(hooks) {
         loader.resetEverything();
       });
 
-      this.requests[0].response = new Uint8Array(10).buffer;
-      this.requests.shift().respond(200, null, '');
-      buffered = videojs.createTimeRanges([[0, 10]]);
-      this.updateend();
+      loader.playlist(playlistWithDuration(20));
+      loader.load();
+      this.clock.tick(1);
+
+      standardXHRResponse(this.requests.shift(), muxedSegment());
+      await waitForLoaderEvent(loader, 'appended');
       this.clock.tick(10);
 
+
       loader.sourceUpdater_.updating = () => true;
-      this.requests[0].response = new Uint8Array(10).buffer;
-      this.requests.shift().respond(200, null, '');
-      buffered = videojs.createTimeRanges([[0, 10]]);
+      standardXHRResponse(this.requests.shift(), muxedSegment());
+      await waitForLoaderEvent(loader, 'appended');
 
-      this.updateend();
-
-      assert.equal(bandwidthupdates, 0, 'did not trigger bandwidthupdate');
-      assert.equal(endOfStreams, 0, 'did not trigger trigger ended');
+      assert.equal(bandwidthupdates, 1, 'triggered bandwidthupdate');
+      assert.equal(endOfStreams, 0, 'triggered ended');
     });
 
     QUnit.test('live playlists do not trigger ended', async function(assert) {
