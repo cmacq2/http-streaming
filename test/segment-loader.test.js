@@ -26,7 +26,9 @@ import {
   mp4Video as mp4VideoSegment,
   mp4VideoInit as mp4VideoInitSegment,
   mp4Audio as mp4AudioSegment,
-  mp4AudioInit as mp4AudioInitSegment
+  mp4AudioInit as mp4AudioInitSegment,
+  encrypted as encryptedSegment,
+  encryptionKey
 } from './test-segments';
 import sinon from 'sinon';
 
@@ -229,12 +231,7 @@ QUnit.module('SegmentLoader', function(hooks) {
     });
 
     QUnit.test('segmentKey will cache new encrypted keys with cacheEncryptionKeys true', async function(assert) {
-      loader.dispose();
-      loader = new SegmentLoader(LoaderCommonSettings.call(this, {
-        loaderType: 'main',
-        segmentMetadataTrack: this.segmentMetadataTrack,
-        cacheEncryptionKeys: true
-      }), {});
+      loader.cacheEncryptionKeys_ = true;
 
       await setupMediaSource(loader.mediaSource_, loader.sourceUpdater_);
 
@@ -242,47 +239,20 @@ QUnit.module('SegmentLoader', function(hooks) {
       loader.load();
       this.clock.tick(1);
 
-      assert.strictEqual(
-        Object.keys(loader.keyCache_).length,
-        0,
-        'no keys have been cached'
-      );
+      const keyCache = loader.keyCache_;
+      const bytes = new Uint32Array([1, 2, 3, 4]);
 
-      const result = loader.segmentKey({
-        resolvedUri: 'key.php',
-        bytes: new Uint32Array([1, 2, 3, 4])
-      });
+      assert.strictEqual(Object.keys(keyCache).length, 0, 'no keys have been cached');
 
-      assert.deepEqual(
-        result,
-        { resolvedUri: 'key.php' },
-        'gets by default'
-      );
+      const result = loader.segmentKey({resolvedUri: 'key.php', bytes});
 
-      loader.segmentKey(
-        {
-          resolvedUri: 'key.php',
-          bytes: new Uint32Array([1, 2, 3, 4])
-        },
-        true
-      );
-
-      assert.deepEqual(
-        loader.keyCache_['key.php'].bytes,
-        new Uint32Array([1, 2, 3, 4]),
-        'key has been cached'
-      );
-
-      loader.dispose();
+      assert.deepEqual(result, {resolvedUri: 'key.php'}, 'gets by default');
+      loader.segmentKey({resolvedUri: 'key.php', bytes}, true);
+      assert.deepEqual(keyCache['key.php'].bytes, bytes, 'key has been cached');
     });
 
     QUnit.test('segmentKey will not cache encrypted keys with cacheEncryptionKeys false', async function(assert) {
-      loader.dispose();
-      loader = new SegmentLoader(LoaderCommonSettings.call(this, {
-        loaderType: 'main',
-        segmentMetadataTrack: this.segmentMetadataTrack,
-        cacheEncryptionKeys: false
-      }), {});
+      loader.cacheEncryptionKeys_ = false;
 
       await setupMediaSource(loader.mediaSource_, loader.sourceUpdater_);
 
@@ -290,91 +260,98 @@ QUnit.module('SegmentLoader', function(hooks) {
       loader.load();
       this.clock.tick(1);
 
-      assert.strictEqual(
-        Object.keys(loader.keyCache_).length,
-        0,
-        'no keys have been cached'
-      );
+      const keyCache = loader.keyCache_;
+      const bytes = new Uint32Array([1, 2, 3, 4]);
 
-      loader.segmentKey(
-        {
-          resolvedUri: 'key.php',
-          bytes: new Uint32Array([1, 2, 3, 4])
-        },
-        // set = true
-        true
-      );
+      assert.strictEqual(Object.keys(keyCache).length, 0, 'no keys have been cached');
+      loader.segmentKey({resolvedUri: 'key.php', bytes}, true);
 
-      assert.strictEqual(
-        Object.keys(loader.keyCache_).length,
-        0,
-        'no keys have been cached since cacheEncryptionKeys is false'
-      );
-      loader.dispose();
+      assert.strictEqual(Object.keys(keyCache).length, 0, 'no keys have been cached');
     });
 
-    // TODO: brandonocasey
-    QUnit.skip('new segment requests will use cached keys', function(assert) {
-      const done = assert.async();
-      const newLoader = new SegmentLoader(LoaderCommonSettings.call(this, {
-        loaderType: 'main',
-        segmentMetadataTrack: this.segmentMetadataTrack,
-        cacheEncryptionKeys: true
-      }), {});
+    QUnit.test('new segment requests will use cached keys', async function(assert) {
+      loader.cacheEncryptionKeys_ = true;
 
-      newLoader.playlist(playlistWithDuration(20, { isEncrypted: true }));
+      await setupMediaSource(loader.mediaSource_, loader.sourceUpdater_);
+
+      loader.playlist(playlistWithDuration(20, { isEncrypted: true }));
+
       // make the keys the same
-      newLoader.playlist_.segments[1].key =
-        videojs.mergeOptions({}, newLoader.playlist_.segments[0].key);
+      loader.playlist_.segments[1].key =
+        videojs.mergeOptions({}, loader.playlist_.segments[0].key);
       // give 2nd key an iv
-      newLoader.playlist_.segments[1].key.iv = new Uint32Array([0, 1, 2, 3]);
+      loader.playlist_.segments[1].key.iv = new Uint32Array([0, 1, 2, 3]);
 
-      newLoader.mimeType(this.mimeType);
-      newLoader.load();
+      loader.load();
       this.clock.tick(1);
 
-      assert.strictEqual(this.requests.length, 2, 'two requests');
+      assert.strictEqual(this.requests.length, 2, 'one request');
       assert.strictEqual(this.requests[0].uri, '0-key.php', 'key request');
       assert.strictEqual(this.requests[1].uri, '0.ts', 'segment request');
 
       // key response
-      standardXHRResponse(this.requests.shift(), new Uint32Array([1, 1, 1, 1]));
+      standardXHRResponse(this.requests.shift(), encryptionKey());
       this.clock.tick(1);
+
       // segment
-      standardXHRResponse(this.requests.shift(), new Uint32Array([1, 5, 0, 1]));
+      standardXHRResponse(this.requests.shift(), encryptedSegment());
       this.clock.tick(1);
 
-      // As the Decrypter is in a web worker, the last function in SegmentLoader is
-      // the easiest way to listen for the decrypted response
-      const origHandleSegment = newLoader.handleSegment_.bind(newLoader);
+      await waitForLoaderEvent(loader, 'appended');
 
-      newLoader.handleSegment_ = () => {
-        origHandleSegment();
-        this.updateend();
-        assert.deepEqual(
-          newLoader.keyCache_['0-key.php'],
-          {
-            resolvedUri: '0-key.php',
-            bytes: new Uint32Array([16777216, 16777216, 16777216, 16777216])
-          },
-        'previous key was cached');
+      assert.deepEqual(loader.keyCache_['0-key.php'], {
+        resolvedUri: '0-key.php',
+        bytes: new Uint32Array([609867320, 2355137646, 2410040447, 480344904])
+      }, 'previous key was cached');
 
-        this.clock.tick(1);
-        assert.deepEqual(
-          newLoader.pendingSegment_.segment.key,
-          {
-            resolvedUri: '0-key.php',
-            uri: '0-key.php',
-            iv: new Uint32Array([0, 1, 2, 3])
-          },
-          'used cached key for request and own initialization vector'
-        );
+      this.clock.tick(1);
+      assert.deepEqual(loader.pendingSegment_.segment.key, {
+        resolvedUri: '0-key.php',
+        uri: '0-key.php',
+        iv: new Uint32Array([0, 1, 2, 3])
+      }, 'used cached key for request and own initialization vector');
 
-        assert.strictEqual(this.requests.length, 1, 'one request');
-        assert.strictEqual(this.requests[0].uri, '1.ts', 'only segment request');
-        done();
-      };
-      newLoader.dispose();
+      assert.strictEqual(this.requests.length, 1, 'one request');
+      assert.strictEqual(this.requests[0].uri, '1.ts', 'only segment request');
+
+      loader.dispose();
+    });
+
+    QUnit.test('new segment request keys every time', async function(assert) {
+      await setupMediaSource(loader.mediaSource_, loader.sourceUpdater_);
+
+      loader.playlist(playlistWithDuration(20, { isEncrypted: true }));
+
+      loader.load();
+      this.clock.tick(1);
+
+      assert.strictEqual(this.requests.length, 2, 'one request');
+      assert.strictEqual(this.requests[0].uri, '0-key.php', 'key request');
+      assert.strictEqual(this.requests[1].uri, '0.ts', 'segment request');
+
+      // key response
+      standardXHRResponse(this.requests.shift(), encryptionKey());
+      this.clock.tick(1);
+
+      // segment
+      standardXHRResponse(this.requests.shift(), encryptedSegment());
+      this.clock.tick(1);
+
+      await waitForLoaderEvent(loader, 'appended');
+      this.clock.tick(1);
+
+      assert.notOk(loader.keyCache_['0-key.php'], 'not cached');
+
+      assert.deepEqual(loader.pendingSegment_.segment.key, {
+        resolvedUri: '1-key.php',
+        uri: '1-key.php'
+      }, 'used cached key for request and own initialization vector');
+
+      assert.strictEqual(this.requests.length, 2, 'two requests');
+      assert.strictEqual(this.requests[0].uri, '1-key.php', 'key request');
+      assert.strictEqual(this.requests[1].uri, '1.ts', 'segment request');
+
+      loader.dispose();
     });
 
     QUnit.test('triggers syncinfoupdate before attempting a resync',
@@ -1610,13 +1587,6 @@ QUnit.module('SegmentLoader: FMP4', function(hooks) {
         segmentMetadataTrack: this.segmentMetadataTrack,
         inbandTextTracks: this.inbandTextTracks
       }), {});
-
-      // shim updateend trigger to be a noop if the loader has no media source
-      this.updateend = function() {
-        if (loader.mediaSource_) {
-          loader.mediaSource_.sourceBuffers[0].trigger('updateend');
-        }
-      };
     });
 
     nestedHooks.afterEach(function(assert) {
